@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: producer
+  namespace: default
+  labels:
+    app: producer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: producer
+  template:
+    metadata:
+      labels:
+        app: producer
+    spec:
+      containers:
+        - name: producer
+          image: neelinihal/producer:latest   # Jenkins will patch this with ${IMAGE_TAG}
+          ports:
+            - containerPort: 8086
+          env:
+            - name: KAFKA_BROKER
+              value: "kafka:9092"
+            - name: TOPIC_NAME
+              value: "producer-topic"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: producer-service
+  namespace: default
+spec:
+  selector:
+    app: producer
+  ports:
+    - protocol: TCP
+      port: 8086
+      targetPort: 8086
+  type: LoadBalancer
