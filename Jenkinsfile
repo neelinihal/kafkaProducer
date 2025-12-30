@@ -16,7 +16,7 @@ pipeline {
     KUBE_NS      = 'default'
     DEPLOY_NAME  = 'producer'
     CONTAINER    = 'producer'
-    GCP_CREDS    = 'gcp-sa-json'   // Jenkins credential ID
+    GCP_CREDS    = 'gcp-sa-json'
     CLUSTER_NAME = 'my-cluster'
     CLUSTER_ZONE = 'us-central1'
     PROJECT_ID   = 'steel-earth-478506-t2'
@@ -50,22 +50,18 @@ pipeline {
     }
 
     stage('Docker login & push') {
-  steps {
-    withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-      bat 'docker logout || ver > nul'
-      bat 'docker login -u %DOCKER_USER% -p %DOCKER_PASS%'
+      steps {
+        withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+          bat 'docker logout || ver > nul'
+          bat 'docker login -u %DOCKER_USER% -p %DOCKER_PASS%'
+        }
+
+        bat "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+        bat "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
+
+        bat "powershell -Command \"(Get-Content deployment.yaml) -replace 'image: neelinihal/producer:.*', 'image: neelinihal/producer:${IMAGE_TAG}' | Set-Content deployment.yaml\""
+      }
     }
-
-    // Build and push the Docker image
-    bat "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-    bat "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
-
-    // Update Kubernetes manifest with the new image tag (PowerShell replace)
-    bat "powershell -Command \"(Get-Content deployment.yaml) -replace 'image: neelinihal/producer:.*', 'image: neelinihal/producer:${IMAGE_TAG}' | Set-Content deployment.yaml\""
-
-  }
-}
-
 
     stage('Authenticate GCP') {
       steps {
@@ -79,9 +75,9 @@ pipeline {
 
     stage('Deploy to GKE') {
       steps {
-        bat "kubectl apply -f deployment.yaml --namespace=${KUBE_NS}" --validate=false
-       	// bat "kubectl rollout restart deployment/${DEPLOY_NAME} -n ${KUBE_NS}"
-        //bat "kubectl rollout status deployment/${DEPLOY_NAME} -n ${KUBE_NS}"
+        bat "kubectl apply -f deployment.yaml --namespace=${KUBE_NS} --validate=false"
+        // bat "kubectl rollout restart deployment/${DEPLOY_NAME} -n ${KUBE_NS}"
+        // bat "kubectl rollout status deployment/${DEPLOY_NAME} -n ${KUBE_NS}"
       }
     }
   }
