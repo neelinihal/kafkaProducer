@@ -16,7 +16,7 @@ pipeline {
     KUBE_NS      = 'default'
     DEPLOY_NAME  = 'producer'
     CONTAINER    = 'producer'
-    GCP_CREDS    = 'gcp-sa-json'
+    GCP_CREDS    = 'gcp-sa-json'   // Jenkins credential ID
     CLUSTER_NAME = 'my-cluster'
     CLUSTER_ZONE = 'us-central1'
     PROJECT_ID   = 'steel-earth-478506-t2'
@@ -35,8 +35,8 @@ pipeline {
     stage('Build (Maven)') {
       steps {
         dir(MODULE_DIR) {
-          bat 'mvn -version'
-          bat 'mvn clean package -Dmaven.test.failure.ignore=false'
+          sh 'mvn -version'
+          sh 'mvn clean package -Dmaven.test.failure.ignore=false'
         }
       }
     }
@@ -44,7 +44,7 @@ pipeline {
     stage('Docker build') {
       steps {
         dir(MODULE_DIR) {
-          bat "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+          sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
         }
       }
     }
@@ -52,32 +52,33 @@ pipeline {
     stage('Docker login & push') {
       steps {
         withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-          bat 'docker logout || ver > nul'
-          bat 'docker login -u %DOCKER_USER% -p %DOCKER_PASS%'
+          sh 'docker logout || true'
+          sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
         }
 
-        bat "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-        bat "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
+        sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+        sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
 
-        bat "powershell -Command \"(Get-Content deployment.yaml) -replace 'image: neelinihal/producer:.*', 'image: neelinihal/producer:${IMAGE_TAG}' | Set-Content deployment.yaml\""
+        // Update Kubernetes manifest with the new image tag
+        sh "sed -i 's|image: neelinihal/producer:.*|image: neelinihal/producer:${IMAGE_TAG}|g' deployment.yaml"
       }
     }
 
     stage('Authenticate GCP') {
       steps {
         withCredentials([file(credentialsId: "${GCP_CREDS}", variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
-          bat "\"C:/Users/neeli/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin/gcloud\" auth activate-service-account --key-file=%GOOGLE_APPLICATION_CREDENTIALS%"
-          bat "\"C:/Users/neeli/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin/gcloud\" config set project ${PROJECT_ID}"
-          bat "\"C:/Users/neeli/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin/gcloud\" container clusters get-credentials ${CLUSTER_NAME} --zone ${CLUSTER_ZONE} --project ${PROJECT_ID}"
+          sh "gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS"
+          sh "gcloud config set project ${PROJECT_ID}"
+          sh "gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${CLUSTER_ZONE} --project ${PROJECT_ID}"
         }
       }
     }
 
     stage('Deploy to GKE') {
       steps {
-        bat "kubectl apply -f deployment.yaml --namespace=${KUBE_NS} --validate=false"
-        // bat "kubectl rollout restart deployment/${DEPLOY_NAME} -n ${KUBE_NS}"
-        // bat "kubectl rollout status deployment/${DEPLOY_NAME} -n ${KUBE_NS}"
+        sh "kubectl apply -f deployment.yaml --namespace=${KUBE_NS} --validate=false"
+        // sh "kubectl rollout restart deployment/${DEPLOY_NAME} -n ${KUBE_NS}"
+        // sh "kubectl rollout status deployment/${DEPLOY_NAME} -n ${KUBE_NS}"
       }
     }
   }
