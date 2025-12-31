@@ -1,10 +1,15 @@
 pipeline {
   agent any
 
+  tools {  // ADD THIS BLOCK
+    jdk 'jdk-17'
+    maven 'Maven 3.9.11'  // Or your Maven version name
+  }
+
   options {
     timestamps()
     disableConcurrentBuilds()
-    skipDefaultCheckout()   // Prevents duplicate "Declarative: Checkout SCM"
+    skipDefaultCheckout()
   }
 
   environment {
@@ -17,7 +22,7 @@ pipeline {
     KUBE_NS      = 'default'
     DEPLOY_NAME  = 'producer'
     CONTAINER    = 'producer'
-    GCP_CREDS    = 'gcp-sa-json'   // Jenkins credential ID
+    GCP_CREDS    = 'gcp-sa-json'
     CLUSTER_NAME = 'my-cluster'
     CLUSTER_ZONE = 'us-central1'
     PROJECT_ID   = 'steel-earth-478506-t2'
@@ -36,19 +41,14 @@ pipeline {
     stage('Build (Maven)') {
       steps {
         dir(MODULE_DIR) {
-          script {
-            // Switch to Java 17
-            def jdk17 = tool name: 'jdk-17', type: 'jdk'
-            env.JAVA_HOME = "${jdk17}"
-            env.PATH = "${jdk17}/bin:${env.PATH}"
-          }
-          sh 'java -version'  // Verify Java 17
-          sh 'mvn -version'   // Should now show Java 17
+          sh 'java -version'   // Verify Java 17 from tools block
+          sh 'mvn -version'    // Verify Maven + Java 17
           sh 'mvn clean package -Dmaven.test.failure.ignore=false'
         }
       }
     }
 
+    // ... rest of your stages unchanged
     stage('Docker build') {
       steps {
         dir(MODULE_DIR) {
@@ -63,10 +63,7 @@ pipeline {
           sh 'docker logout || true'
           sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
         }
-
         sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
-
-        // Update Kubernetes manifest with the new image tag
         sh "sed -i 's|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g' deployment.yaml"
       }
     }
@@ -74,7 +71,7 @@ pipeline {
     stage('Authenticate GCP') {
       steps {
         withCredentials([file(credentialsId: "${GCP_CREDS}", variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
-          sh "gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS"
+          sh "gcloud auth activate-service-account --key-file=\$GOOGLE_APPLICATION_CREDENTIALS"
           sh "gcloud config set project ${PROJECT_ID}"
           sh "gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${CLUSTER_ZONE} --project ${PROJECT_ID}"
         }
@@ -84,9 +81,6 @@ pipeline {
     stage('Deploy to GKE') {
       steps {
         sh "kubectl apply -f deployment.yaml --namespace=${KUBE_NS} --validate=false"
-        // Optional rollout commands:
-        // sh "kubectl rollout restart deployment/${DEPLOY_NAME} -n ${KUBE_NS}"
-        // sh "kubectl rollout status deployment/${DEPLOY_NAME} -n ${KUBE_NS}"
       }
     }
   }
@@ -99,7 +93,7 @@ pipeline {
       echo "❌ Pipeline failed. Please check logs for details."
     }
     always {
-      cleanWs()  // Clean workspace after build
+      cleanWs()
     }
   }
 }
