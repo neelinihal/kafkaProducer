@@ -21,6 +21,21 @@ pipeline {
     CLUSTER_ZONE = 'us-central1'
     PROJECT_ID   = 'steel-earth-478506-t2'
   }
+stage('Build (Maven)') {
+  steps {
+    dir(MODULE_DIR) {
+      script {
+        // Switch to Java 17
+        def jdk17 = tool name: 'jdk-17', type: 'jdk'
+        env.JAVA_HOME = "${jdk17}"
+        env.PATH = "${jdk17}/bin:${env.PATH}"
+      }
+      sh 'java -version'  // Verify Java 17
+      sh 'mvn -version'   // Should now show Java 17
+      sh 'mvn clean package -Dmaven.test.failure.ignore=false'
+    }
+  }
+}
 
   stages {
     stage('Checkout') {
