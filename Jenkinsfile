@@ -4,6 +4,7 @@ pipeline {
   options {
     timestamps()
     disableConcurrentBuilds()
+    skipDefaultCheckout()   // Prevents duplicate "Declarative: Checkout SCM"
   }
 
   environment {
@@ -87,6 +88,18 @@ pipeline {
         // sh "kubectl rollout restart deployment/${DEPLOY_NAME} -n ${KUBE_NS}"
         // sh "kubectl rollout status deployment/${DEPLOY_NAME} -n ${KUBE_NS}"
       }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ Pipeline completed successfully. Image ${IMAGE_NAME}:${IMAGE_TAG} deployed to ${CLUSTER_NAME} in namespace ${KUBE_NS}."
+    }
+    failure {
+      echo "❌ Pipeline failed. Please check logs for details."
+    }
+    always {
+      cleanWs()  // Clean workspace after build
     }
   }
 }
