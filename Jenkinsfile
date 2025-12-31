@@ -35,21 +35,27 @@ pipeline {
     stage('Build (Maven)') {
   steps {
     dir(MODULE_DIR) {
+      script {
+        // Get JDK-17 path using Groovy (WORKS)
+        def jdk17 = tool name: 'JDK-17', type: 'jdk'
+        env.JAVA_HOME = "${jdk17}"
+        env.PATH = "${jdk17}/bin:${env.PATH}"
+      }
+      // NOW use sh with proper exports
       sh '''
-        # Force Java 17 FIRST in PATH
-        export JAVA_HOME=$(tool name: "JDK-17", type: "jdk")
-        export PATH=$JAVA_HOME/bin:$PATH
+        # Double-check environment
+        echo "JAVA_HOME=$JAVA_HOME"
+        echo "PATH starts with: $PATH"
+        $JAVA_HOME/bin/java -version
+        $JAVA_HOME/bin/mvn -version
         
-        # Verify BOTH show Java 17
-        java -version
-        mvn -version
-        
-        # Build with Java 17
-        mvn clean package -Dmaven.test.failure.ignore=false
+        # Build using Java 17 explicitly
+        $JAVA_HOME/bin/mvn clean package -Dmaven.test.failure.ignore=false
       '''
     }
   }
 }
+
 
 
     // ... all other stages exactly the same
