@@ -1,11 +1,6 @@
 pipeline {
   agent any
 
-  tools {  // ADD THIS BLOCK
-    jdk 'jdk-17'
-    maven 'Maven 3.9.11'  // Or your Maven version name
-  }
-
   options {
     timestamps()
     disableConcurrentBuilds()
@@ -21,7 +16,6 @@ pipeline {
     DOCKER_CREDS = 'dockerhub-creds'
     KUBE_NS      = 'default'
     DEPLOY_NAME  = 'producer'
-    CONTAINER    = 'producer'
     GCP_CREDS    = 'gcp-sa-json'
     CLUSTER_NAME = 'my-cluster'
     CLUSTER_ZONE = 'us-central1'
@@ -41,20 +35,22 @@ pipeline {
     stage('Build (Maven)') {
       steps {
         dir(MODULE_DIR) {
-          sh 'java -version'   // Verify Java 17 from tools block
-          sh 'mvn -version'    // Verify Maven + Java 17
+          script {
+            // Force Java 17 (works without tools config)
+            def jdk17 = tool name: 'JDK-17', type: 'jdk'  // Your exact name
+            env.JAVA_HOME = "${jdk17}"
+            env.PATH = "${jdk17}/bin:${env.PATH}"
+          }
+          sh 'java -version'
+          sh 'mvn -version'
           sh 'mvn clean package -Dmaven.test.failure.ignore=false'
         }
       }
     }
 
-    // ... rest of your stages unchanged
+    // ... all other stages exactly the same
     stage('Docker build') {
-      steps {
-        dir(MODULE_DIR) {
-          sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-        }
-      }
+      steps { dir(MODULE_DIR) { sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ." } }
     }
 
     stage('Docker login & push') {
@@ -86,14 +82,8 @@ pipeline {
   }
 
   post {
-    success {
-      echo "✅ Pipeline completed successfully. Image ${IMAGE_NAME}:${IMAGE_TAG} deployed to ${CLUSTER_NAME} in namespace ${KUBE_NS}."
-    }
-    failure {
-      echo "❌ Pipeline failed. Please check logs for details."
-    }
-    always {
-      cleanWs()
-    }
+    success { echo "✅ Pipeline completed successfully!" }
+    failure { echo "❌ Pipeline failed." }
+    always { cleanWs() }
   }
 }
