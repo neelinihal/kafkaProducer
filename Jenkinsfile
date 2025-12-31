@@ -32,35 +32,38 @@ pipeline {
       }
     }
 
-    stage('Build (Maven)') {
-  steps {
-    dir(MODULE_DIR) {
-      script {
-        // Get JDK-17 path using Groovy (WORKS)
-        def jdk17 = tool name: 'JDK-17', type: 'jdk'
-        env.JAVA_HOME = "${jdk17}"
-        env.PATH = "${jdk17}/bin:${env.PATH}"
+    stage('Verify Environment') {
+      steps {
+        script {
+          def jdk17 = tool name: 'JDK-17', type: 'jdk'
+          env.JAVA_HOME = "${jdk17}"
+          env.MAVEN_HOME = "/opt/maven"
+          env.PATH = "${jdk17}/bin:${env.MAVEN_HOME}/bin:${env.PATH}"
+        }
+        sh '''
+          echo "JAVA_HOME=$JAVA_HOME"
+          echo "MAVEN_HOME=$MAVEN_HOME"
+          echo "PATH=$PATH"
+          java -version
+          mvn -version
+        '''
       }
-      // NOW use sh with proper exports
-      sh '''
-        # Double-check environment
-        echo "JAVA_HOME=$JAVA_HOME"
-        echo "PATH starts with: $PATH"
-        $JAVA_HOME/bin/java -version
-        $JAVA_HOME/bin/mvn -version
-        
-        # Build using Java 17 explicitly
-        $JAVA_HOME/bin/mvn clean package -Dmaven.test.failure.ignore=false
-      '''
     }
-  }
-}
 
+    stage('Build (Maven)') {
+      steps {
+        dir(MODULE_DIR) {
+          sh 'mvn clean package -Dmaven.test.failure.ignore=false'
+        }
+      }
+    }
 
-
-    // ... all other stages exactly the same
     stage('Docker build') {
-      steps { dir(MODULE_DIR) { sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ." } }
+      steps {
+        dir(MODULE_DIR) {
+          sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+        }
+      }
     }
 
     stage('Docker login & push') {
@@ -77,7 +80,7 @@ pipeline {
     stage('Authenticate GCP') {
       steps {
         withCredentials([file(credentialsId: "${GCP_CREDS}", variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
-          sh "gcloud auth activate-service-account --key-file=\$GOOGLE_APPLICATION_CREDENTIALS"
+          sh "gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS"
           sh "gcloud config set project ${PROJECT_ID}"
           sh "gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${CLUSTER_ZONE} --project ${PROJECT_ID}"
         }
@@ -92,8 +95,14 @@ pipeline {
   }
 
   post {
-    success { echo "✅ Pipeline completed successfully!" }
-    failure { echo "❌ Pipeline failed." }
-    always { cleanWs() }
+    success {
+      echo "✅ Pipeline completed successfully!"
+    }
+    failure {
+      echo "❌ Pipeline failed."
+    }
+    always {
+      cleanWs()
+    }
   }
 }
