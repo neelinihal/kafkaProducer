@@ -6,10 +6,6 @@ pipeline {
     disableConcurrentBuilds()
   }
 
-  tools {
-    jdk 'JDK17'       // Name must match your Global Tool Configuration
-  }
-
   environment {
     REPO_URL     = 'https://github.com/neelinihal/kafkaProducer.git'
     GIT_BRANCH   = 'producer'
