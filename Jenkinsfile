@@ -21,21 +21,6 @@ pipeline {
     CLUSTER_ZONE = 'us-central1'
     PROJECT_ID   = 'steel-earth-478506-t2'
   }
-stage('Build (Maven)') {
-  steps {
-    dir(MODULE_DIR) {
-      script {
-        // Switch to Java 17
-        def jdk17 = tool name: 'jdk-17', type: 'jdk'
-        env.JAVA_HOME = "${jdk17}"
-        env.PATH = "${jdk17}/bin:${env.PATH}"
-      }
-      sh 'java -version'  // Verify Java 17
-      sh 'mvn -version'   // Should now show Java 17
-      sh 'mvn clean package -Dmaven.test.failure.ignore=false'
-    }
-  }
-}
 
   stages {
     stage('Checkout') {
@@ -50,7 +35,14 @@ stage('Build (Maven)') {
     stage('Build (Maven)') {
       steps {
         dir(MODULE_DIR) {
-          sh 'mvn -version'
+          script {
+            // Switch to Java 17
+            def jdk17 = tool name: 'jdk-17', type: 'jdk'
+            env.JAVA_HOME = "${jdk17}"
+            env.PATH = "${jdk17}/bin:${env.PATH}"
+          }
+          sh 'java -version'  // Verify Java 17
+          sh 'mvn -version'   // Should now show Java 17
           sh 'mvn clean package -Dmaven.test.failure.ignore=false'
         }
       }
@@ -71,11 +63,10 @@ stage('Build (Maven)') {
           sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
         }
 
-        sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
         sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
 
         // Update Kubernetes manifest with the new image tag
-        sh "sed -i 's|image: neelinihal/producer:.*|image: neelinihal/producer:${IMAGE_TAG}|g' deployment.yaml"
+        sh "sed -i 's|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g' deployment.yaml"
       }
     }
 
@@ -92,6 +83,7 @@ stage('Build (Maven)') {
     stage('Deploy to GKE') {
       steps {
         sh "kubectl apply -f deployment.yaml --namespace=${KUBE_NS} --validate=false"
+        // Optional rollout commands:
         // sh "kubectl rollout restart deployment/${DEPLOY_NAME} -n ${KUBE_NS}"
         // sh "kubectl rollout status deployment/${DEPLOY_NAME} -n ${KUBE_NS}"
       }
