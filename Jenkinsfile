@@ -33,20 +33,24 @@ pipeline {
     }
 
     stage('Build (Maven)') {
-      steps {
-        dir(MODULE_DIR) {
-          script {
-            // Force Java 17 (works without tools config)
-            def jdk17 = tool name: 'JDK-17', type: 'jdk'  // Your exact name
-            env.JAVA_HOME = "${jdk17}"
-            env.PATH = "${jdk17}/bin:${env.PATH}"
-          }
-          sh 'java -version'
-          sh 'mvn -version'
-          sh 'mvn clean package -Dmaven.test.failure.ignore=false'
-        }
-      }
+  steps {
+    dir(MODULE_DIR) {
+      sh '''
+        # Force Java 17 FIRST in PATH
+        export JAVA_HOME=$(tool name: "JDK-17", type: "jdk")
+        export PATH=$JAVA_HOME/bin:$PATH
+        
+        # Verify BOTH show Java 17
+        java -version
+        mvn -version
+        
+        # Build with Java 17
+        mvn clean package -Dmaven.test.failure.ignore=false
+      '''
     }
+  }
+}
+
 
     // ... all other stages exactly the same
     stage('Docker build') {
